@@ -6,7 +6,7 @@ use anyhow::{anyhow, Context as _, Result};
 use assistant_slash_command::{
     SlashCommandOutput, SlashCommandOutputSection, SlashCommandRegistry,
 };
-use client::{proto, telemetry::Telemetry};
+use client::proto;
 use clock::ReplicaId;
 use collections::{HashMap, HashSet};
 use fs::Fs;
@@ -24,7 +24,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use telemetry_events::AssistantKind;
 use ui::SharedString;
 use util::{post_inc, TryFutureExt};
 use uuid::Uuid;
@@ -350,24 +349,18 @@ pub struct Context {
     pending_save: Task<Result<()>>,
     path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
-    telemetry: Option<Arc<Telemetry>>,
     language_registry: Arc<LanguageRegistry>,
 }
 
 impl EventEmitter<ContextEvent> for Context {}
 
 impl Context {
-    pub fn local(
-        language_registry: Arc<LanguageRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
-        cx: &mut ModelContext<Self>,
-    ) -> Self {
+    pub fn local(language_registry: Arc<LanguageRegistry>, cx: &mut ModelContext<Self>) -> Self {
         Self::new(
             ContextId::new(),
             ReplicaId::default(),
             language::Capability::ReadWrite,
             language_registry,
-            telemetry,
             cx,
         )
     }
@@ -377,7 +370,6 @@ impl Context {
         replica_id: ReplicaId,
         capability: language::Capability,
         language_registry: Arc<LanguageRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut ModelContext<Self>,
     ) -> Self {
         let buffer = cx.new_model(|_cx| {
@@ -416,7 +408,6 @@ impl Context {
             pending_save: Task::ready(Ok(())),
             path: None,
             buffer,
-            telemetry,
             language_registry,
         };
 
@@ -487,7 +478,6 @@ impl Context {
         saved_context: SavedContext,
         path: PathBuf,
         language_registry: Arc<LanguageRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut ModelContext<Self>,
     ) -> Self {
         let id = saved_context.id.clone().unwrap_or_else(|| ContextId::new());
@@ -496,7 +486,6 @@ impl Context {
             ReplicaId::default(),
             language::Capability::ReadWrite,
             language_registry,
-            telemetry,
             cx,
         );
         this.path = Some(path);
@@ -1222,17 +1211,6 @@ impl Context {
                                 metadata.status = MessageStatus::Done;
                             }
                         });
-
-                        if let Some(telemetry) = this.telemetry.as_ref() {
-                            let model = CompletionProvider::global(cx).model();
-                            telemetry.report_assistant_event(
-                                Some(this.id.0.clone()),
-                                AssistantKind::Panel,
-                                model.telemetry_id(),
-                                response_latency,
-                                error_message,
-                            );
-                        }
                     })
                     .ok();
                 }
@@ -2126,7 +2104,7 @@ mod tests {
         assistant_panel::init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
 
-        let context = cx.new_model(|cx| Context::local(registry, None, cx));
+        let context = cx.new_model(|cx| Context::local(registry, cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -2257,7 +2235,7 @@ mod tests {
         assistant_panel::init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
 
-        let context = cx.new_model(|cx| Context::local(registry, None, cx));
+        let context = cx.new_model(|cx| Context::local(registry, cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -2350,7 +2328,7 @@ mod tests {
         cx.set_global(settings_store);
         assistant_panel::init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
-        let context = cx.new_model(|cx| Context::local(registry, None, cx));
+        let context = cx.new_model(|cx| Context::local(registry, cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -2455,7 +2433,7 @@ mod tests {
         slash_command_registry.register_command(active_command::ActiveSlashCommand, false);
 
         let registry = Arc::new(LanguageRegistry::test(cx.executor()));
-        let context = cx.new_model(|cx| Context::local(registry.clone(), None, cx));
+        let context = cx.new_model(|cx| Context::local(registry.clone(), cx));
 
         let output_ranges = Rc::new(RefCell::new(HashSet::default()));
         context.update(cx, |_, cx| {
@@ -2628,7 +2606,7 @@ mod tests {
         cx.update(FakeCompletionProvider::setup_test);
         cx.update(assistant_panel::init);
         let registry = Arc::new(LanguageRegistry::test(cx.executor()));
-        let context = cx.new_model(|cx| Context::local(registry.clone(), None, cx));
+        let context = cx.new_model(|cx| Context::local(registry.clone(), cx));
         let buffer = context.read_with(cx, |context, _| context.buffer.clone());
         let message_0 = context.read_with(cx, |context, _| context.message_anchors[0].id);
         let message_1 = context.update(cx, |context, cx| {
@@ -2663,13 +2641,7 @@ mod tests {
 
         let serialized_context = context.read_with(cx, |context, cx| context.serialize(cx));
         let deserialized_context = cx.new_model(|cx| {
-            Context::deserialize(
-                serialized_context,
-                Default::default(),
-                registry.clone(),
-                None,
-                cx,
-            )
+            Context::deserialize(serialized_context, Default::default(), registry.clone(), cx)
         });
         let deserialized_buffer =
             deserialized_context.read_with(cx, |context, _| context.buffer.clone());
@@ -2721,7 +2693,6 @@ mod tests {
                     i as ReplicaId,
                     language::Capability::ReadWrite,
                     registry.clone(),
-                    None,
                     cx,
                 )
             });

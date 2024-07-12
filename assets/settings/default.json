@@ -500,13 +500,6 @@
   "hard_tabs": false,
   // How many columns a tab should occupy.
   "tab_size": 4,
-  // Control what info is collected by Zed.
-  "telemetry": {
-    // Send debug info like crash reports.
-    "diagnostics": true,
-    // Send anonymized usage data like what languages you're using Zed with.
-    "metrics": true
-  },
   // Automatically update Zed. This setting may be ignored on Linux if
   // installed through a package manager.
   "auto_update": true,
