@@ -3,7 +3,7 @@ use crate::{
     SavedContextMetadata,
 };
 use anyhow::{anyhow, Context as _, Result};
-use client::{proto, telemetry::Telemetry, Client, TypedEnvelope};
+use client::{proto, Client, TypedEnvelope};
 use clock::ReplicaId;
 use fs::Fs;
 use futures::StreamExt;
@@ -42,7 +42,6 @@ pub struct ContextStore {
     host_contexts: Vec<RemoteContextMetadata>,
     fs: Arc<dyn Fs>,
     languages: Arc<LanguageRegistry>,
-    telemetry: Arc<Telemetry>,
     _watch_updates: Task<Option<()>>,
     client: Arc<Client>,
     project: Model<Project>,
@@ -76,7 +75,6 @@ impl ContextStore {
     pub fn new(project: Model<Project>, cx: &mut AppContext) -> Task<Result<Model<Self>>> {
         let fs = project.read(cx).fs().clone();
         let languages = project.read(cx).languages().clone();
-        let telemetry = project.read(cx).client().telemetry().clone();
         cx.spawn(|mut cx| async move {
             const CONTEXT_WATCH_DURATION: Duration = Duration::from_millis(100);
             let (mut events, _) = fs.watch(contexts_dir(), CONTEXT_WATCH_DURATION).await;
@@ -88,7 +86,6 @@ impl ContextStore {
                     host_contexts: Vec::new(),
                     fs,
                     languages,
-                    telemetry,
                     _watch_updates: cx.spawn(|this, mut cx| {
                         async move {
                             while events.next().await.is_some() {
@@ -292,9 +289,7 @@ impl ContextStore {
     }
 
     pub fn create(&mut self, cx: &mut ModelContext<Self>) -> Model<Context> {
-        let context = cx.new_model(|cx| {
-            Context::local(self.languages.clone(), Some(self.telemetry.clone()), cx)
-        });
+        let context = cx.new_model(|cx| Context::local(self.languages.clone(), cx));
         self.register_context(&context, cx);
         context
     }
@@ -310,7 +305,6 @@ impl ContextStore {
 
         let fs = self.fs.clone();
         let languages = self.languages.clone();
-        let telemetry = self.telemetry.clone();
         let load = cx.background_executor().spawn({
             let path = path.clone();
             async move {
@@ -321,9 +315,8 @@ impl ContextStore {
 
         cx.spawn(|this, mut cx| async move {
             let saved_context = load.await?;
-            let context = cx.new_model(|cx| {
-                Context::deserialize(saved_context, path.clone(), languages, Some(telemetry), cx)
-            })?;
+            let context = cx
+                .new_model(|cx| Context::deserialize(saved_context, path.clone(), languages, cx))?;
             this.update(&mut cx, |this, cx| {
                 if let Some(existing_context) = this.loaded_context_for_path(&path, cx) {
                     existing_context
@@ -377,7 +370,6 @@ impl ContextStore {
         let replica_id = project.replica_id();
         let capability = project.capability();
         let language_registry = self.languages.clone();
-        let telemetry = self.telemetry.clone();
         let request = self.client.request(proto::OpenContext {
             project_id,
             context_id: context_id.to_proto(),
@@ -391,7 +383,6 @@ impl ContextStore {
                     replica_id,
                     capability,
                     language_registry,
-                    Some(telemetry),
                     cx,
                 )
             })?;

@@ -486,28 +486,18 @@ impl ActiveCall {
 }
 
 pub fn report_call_event_for_room(
-    operation: &'static str,
-    room_id: u64,
-    channel_id: Option<ChannelId>,
-    client: &Arc<Client>,
-) {
-    let telemetry = client.telemetry();
-
-    telemetry.report_call_event(operation, Some(room_id), channel_id)
-}
+    _operation: &'static str,
+    _room_id: u64,
+    _channel_id: Option<ChannelId>,
+    _client: &Arc<Client>,
+) {}
 
 pub fn report_call_event_for_channel(
-    operation: &'static str,
-    channel_id: ChannelId,
-    client: &Arc<Client>,
-    cx: &AppContext,
-) {
-    let room = ActiveCall::global(cx).read(cx).room();
-
-    let telemetry = client.telemetry();
-
-    telemetry.report_call_event(operation, room.map(|r| r.read(cx).id()), Some(channel_id))
-}
+    _operation: &'static str,
+    _channel_id: ChannelId,
+    _client: &Arc<Client>,
+    _cx: &AppContext,
+) {}
 
 #[cfg(test)]
 mod test {

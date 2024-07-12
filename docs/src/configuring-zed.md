@@ -1185,41 +1185,6 @@ List of `integer` column numbers
 
 `integer` values
 
-## Telemetry
-
-- Description: Control what info is collected by Zed.
-- Setting: `telemetry`
-- Default:
-
-```json
-"telemetry": {
-  "diagnostics": true,
-  "metrics": true
-},
-```
-
-**Options**
-
-### Diagnostics
-
-- Description: Setting for sending debug-related data, such as crash reports.
-- Setting: `diagnostics`
-- Default: `true`
-
-**Options**
-
-`boolean` values
-
-### Metrics
-
-- Description: Setting for sending anonymized usage data, such what languages you're using Zed with.
-- Setting: `metrics`
-- Default: `true`
-
-**Options**
-
-`boolean` values
-
 ## Terminal
 
 - Description: Configuration for the terminal.

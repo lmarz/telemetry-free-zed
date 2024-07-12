@@ -4,7 +4,6 @@ use crate::{
     CompletionProvider, LanguageModelRequest, LanguageModelRequestMessage, Role,
 };
 use anyhow::{Context as _, Result};
-use client::telemetry::Telemetry;
 use collections::{HashMap, VecDeque};
 use editor::{
     actions::{MoveDown, MoveUp, SelectAll},
@@ -30,8 +29,8 @@ use ui::{prelude::*, ContextMenu, PopoverMenu, Tooltip};
 use util::ResultExt;
 use workspace::{notifications::NotificationId, Toast, Workspace};
 
-pub fn init(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>, cx: &mut AppContext) {
-    cx.set_global(TerminalInlineAssistant::new(fs, telemetry));
+pub fn init(fs: Arc<dyn Fs>, cx: &mut AppContext) {
+    cx.set_global(TerminalInlineAssistant::new(fs));
 }
 
 const PROMPT_HISTORY_MAX_LEN: usize = 20;
@@ -51,19 +50,17 @@ pub struct TerminalInlineAssistant {
     next_assist_id: TerminalInlineAssistId,
     assists: HashMap<TerminalInlineAssistId, TerminalInlineAssist>,
     prompt_history: VecDeque<String>,
-    telemetry: Option<Arc<Telemetry>>,
     fs: Arc<dyn Fs>,
 }
 
 impl Global for TerminalInlineAssistant {}
 
 impl TerminalInlineAssistant {
-    pub fn new(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>) -> Self {
+    pub fn new(fs: Arc<dyn Fs>) -> Self {
         Self {
             next_assist_id: TerminalInlineAssistId::default(),
             assists: HashMap::default(),
             prompt_history: VecDeque::default(),
-            telemetry: Some(telemetry),
             fs,
         }
     }
@@ -79,7 +76,7 @@ impl TerminalInlineAssistant {
         let assist_id = self.next_assist_id.post_inc();
         let prompt_buffer = cx.new_model(|cx| Buffer::local("", cx));
         let prompt_buffer = cx.new_model(|cx| MultiBuffer::singleton(prompt_buffer, cx));
-        let codegen = cx.new_model(|_| Codegen::new(terminal, self.telemetry.clone()));
+        let codegen = cx.new_model(|_| Codegen::new(terminal));
 
         let prompt_editor = cx.new_view(|cx| {
             PromptEditor::new(
@@ -1003,17 +1000,15 @@ impl TerminalTransaction {
 
 pub struct Codegen {
     status: CodegenStatus,
-    telemetry: Option<Arc<Telemetry>>,
     terminal: Model<Terminal>,
     generation: Task<()>,
     transaction: Option<TerminalTransaction>,
 }
 
 impl Codegen {
-    pub fn new(terminal: Model<Terminal>, telemetry: Option<Arc<Telemetry>>) -> Self {
+    pub fn new(terminal: Model<Terminal>) -> Self {
         Self {
             terminal,
-            telemetry,
             status: CodegenStatus::Idle,
             generation: Task::ready(()),
             transaction: None,
@@ -1024,8 +1019,6 @@ impl Codegen {
         self.status = CodegenStatus::Pending;
         self.transaction = Some(TerminalTransaction::start(self.terminal.clone()));
 
-        let telemetry = self.telemetry.clone();
-        let model_telemetry_id = prompt.model.telemetry_id();
         let response = CompletionProvider::global(cx).complete(prompt, cx);
 
         self.generation = cx.spawn(|this, mut cx| async move {
@@ -1050,17 +1043,6 @@ impl Codegen {
                     };
 
                     let result = task.await;
-
-                    let error_message = result.as_ref().err().map(|error| error.to_string());
-                    if let Some(telemetry) = telemetry {
-                        telemetry.report_assistant_event(
-                            None,
-                            telemetry_events::AssistantKind::Inline,
-                            model_telemetry_id,
-                            response_latency,
-                            error_message,
-                        );
-                    }
 
                     result?;
                     anyhow::Ok(())
