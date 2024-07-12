@@ -18,7 +18,6 @@ use crate::{
 use anyhow::{anyhow, Result};
 use assistant_slash_command::{SlashCommand, SlashCommandOutput, SlashCommandOutputSection};
 use breadcrumbs::Breadcrumbs;
-use client::telemetry::Telemetry;
 use collections::{BTreeSet, HashMap, HashSet};
 use editor::{
     actions::{FoldAt, MoveToEndOfLine, Newline, ShowCompletions, UnfoldAt},
@@ -59,7 +58,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use telemetry_events::AssistantKind;
 use terminal_view::{terminal_panel::TerminalPanel, TerminalView};
 use theme::ThemeSettings;
 use ui::{
@@ -110,7 +108,6 @@ pub struct AssistantPanel {
     languages: Arc<LanguageRegistry>,
     slash_commands: Arc<SlashCommandRegistry>,
     fs: Arc<dyn Fs>,
-    telemetry: Arc<Telemetry>,
     subscriptions: Vec<Subscription>,
     authentication_prompt: Option<AnyView>,
     model_selector_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -312,7 +309,6 @@ impl AssistantPanel {
             languages: workspace.app_state().languages.clone(),
             slash_commands: SlashCommandRegistry::global(cx),
             fs: workspace.app_state().fs.clone(),
-            telemetry: workspace.client().telemetry().clone(),
             subscriptions,
             authentication_prompt: None,
             model_selector_menu_handle,
@@ -626,7 +622,6 @@ impl AssistantPanel {
         let workspace = self.workspace.clone();
         let slash_commands = self.slash_commands.clone();
         let languages = self.languages.clone();
-        let telemetry = self.telemetry.clone();
 
         let lsp_adapter_delegate = workspace
             .update(cx, |workspace, cx| {
@@ -637,15 +632,9 @@ impl AssistantPanel {
 
         cx.spawn(|this, mut cx| async move {
             let saved_context = saved_context.await?;
-            let context = Context::deserialize(
-                saved_context,
-                path,
-                languages,
-                slash_commands,
-                Some(telemetry),
-                &mut cx,
-            )
-            .await?;
+            let context =
+                Context::deserialize(saved_context, path, languages, slash_commands, &mut cx)
+                    .await?;
 
             this.update(&mut cx, |this, cx| {
                 let workspace = workspace
@@ -847,7 +836,6 @@ pub struct Context {
     pending_save: Task<Result<()>>,
     path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
-    telemetry: Option<Arc<Telemetry>>,
     slash_command_registry: Arc<SlashCommandRegistry>,
     language_registry: Arc<LanguageRegistry>,
 }
@@ -858,7 +846,6 @@ impl Context {
     fn new(
         language_registry: Arc<LanguageRegistry>,
         slash_command_registry: Arc<SlashCommandRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut ModelContext<Self>,
     ) -> Self {
         let buffer = cx.new_model(|cx| {
@@ -888,7 +875,6 @@ impl Context {
             pending_save: Task::ready(Ok(())),
             path: None,
             buffer,
-            telemetry,
             language_registry,
             slash_command_registry,
         };
@@ -956,7 +942,6 @@ impl Context {
         path: PathBuf,
         language_registry: Arc<LanguageRegistry>,
         slash_command_registry: Arc<SlashCommandRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut AsyncAppContext,
     ) -> Result<Model<Self>> {
         let id = match saved_context.id {
@@ -1026,7 +1011,6 @@ impl Context {
                 pending_save: Task::ready(Ok(())),
                 path: Some(path),
                 buffer,
-                telemetry,
                 language_registry,
                 slash_command_registry,
             };
@@ -1491,17 +1475,6 @@ impl Context {
                                     MessageStatus::Error(SharedString::from(error_message.clone()));
                             } else {
                                 metadata.status = MessageStatus::Done;
-                            }
-
-                            if let Some(telemetry) = this.telemetry.as_ref() {
-                                let model = CompletionProvider::global(cx).model();
-                                telemetry.report_assistant_event(
-                                    this.id.clone(),
-                                    AssistantKind::Panel,
-                                    model.telemetry_id(),
-                                    response_latency,
-                                    error_message,
-                                );
                             }
 
                             cx.emit(ContextEvent::MessagesEdited);
@@ -2033,18 +2006,11 @@ impl ContextEditor {
         workspace: View<Workspace>,
         cx: &mut ViewContext<Self>,
     ) -> Self {
-        let telemetry = workspace.read(cx).client().telemetry().clone();
         let project = workspace.read(cx).project().clone();
         let lsp_adapter_delegate = make_lsp_adapter_delegate(&project, cx).log_err();
 
-        let context = cx.new_model(|cx| {
-            Context::new(
-                language_registry,
-                slash_command_registry,
-                Some(telemetry),
-                cx,
-            )
-        });
+        let context =
+            cx.new_model(|cx| Context::new(language_registry, slash_command_registry, cx));
 
         let mut this = Self::for_context(context, fs, workspace, lsp_adapter_delegate, cx);
         this.insert_default_prompt(cx);
@@ -3649,7 +3615,7 @@ mod tests {
         init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
 
-        let context = cx.new_model(|cx| Context::new(registry, Default::default(), None, cx));
+        let context = cx.new_model(|cx| Context::new(registry, Default::default(), cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -3780,7 +3746,7 @@ mod tests {
         init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
 
-        let context = cx.new_model(|cx| Context::new(registry, Default::default(), None, cx));
+        let context = cx.new_model(|cx| Context::new(registry, Default::default(), cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -3873,7 +3839,7 @@ mod tests {
         cx.set_global(settings_store);
         init(cx);
         let registry = Arc::new(LanguageRegistry::test(cx.background_executor().clone()));
-        let context = cx.new_model(|cx| Context::new(registry, Default::default(), None, cx));
+        let context = cx.new_model(|cx| Context::new(registry, Default::default(), cx));
         let buffer = context.read(cx).buffer.clone();
 
         let message_1 = context.read(cx).message_anchors[0].clone();
@@ -3979,8 +3945,7 @@ mod tests {
         slash_command_registry.register_command(active_command::ActiveSlashCommand, false);
 
         let registry = Arc::new(LanguageRegistry::test(cx.executor()));
-        let context =
-            cx.new_model(|cx| Context::new(registry.clone(), slash_command_registry, None, cx));
+        let context = cx.new_model(|cx| Context::new(registry.clone(), slash_command_registry, cx));
 
         let output_ranges = Rc::new(RefCell::new(HashSet::default()));
         context.update(cx, |_, cx| {
@@ -4153,8 +4118,7 @@ mod tests {
         cx.update(FakeCompletionProvider::setup_test);
         cx.update(init);
         let registry = Arc::new(LanguageRegistry::test(cx.executor()));
-        let context =
-            cx.new_model(|cx| Context::new(registry.clone(), Default::default(), None, cx));
+        let context = cx.new_model(|cx| Context::new(registry.clone(), Default::default(), cx));
         let buffer = context.read_with(cx, |context, _| context.buffer.clone());
         let message_0 = context.read_with(cx, |context, _| context.message_anchors[0].id);
         let message_1 = context.update(cx, |context, cx| {
@@ -4192,7 +4156,6 @@ mod tests {
             Default::default(),
             registry.clone(),
             Default::default(),
-            None,
             &mut cx.to_async(),
         )
         .await

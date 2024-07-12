@@ -105,15 +105,6 @@ impl Default for LanguageModel {
 }
 
 impl LanguageModel {
-    pub fn telemetry_id(&self) -> String {
-        match self {
-            LanguageModel::OpenAi(model) => format!("openai/{}", model.id()),
-            LanguageModel::Anthropic(model) => format!("anthropic/{}", model.id()),
-            LanguageModel::Cloud(model) => format!("zed.dev/{}", model.id()),
-            LanguageModel::Ollama(model) => format!("ollama/{}", model.id()),
-        }
-    }
-
     pub fn display_name(&self) -> String {
         match self {
             LanguageModel::OpenAi(model) => model.display_name().into(),
@@ -292,8 +283,8 @@ pub fn init(fs: Arc<dyn Fs>, client: Arc<Client>, cx: &mut AppContext) {
     assistant_slash_command::init(cx);
     register_slash_commands(cx);
     assistant_panel::init(cx);
-    inline_assistant::init(fs.clone(), client.telemetry().clone(), cx);
-    terminal_inline_assistant::init(fs.clone(), client.telemetry().clone(), cx);
+    inline_assistant::init(fs.clone(), cx);
+    terminal_inline_assistant::init(fs.clone(), cx);
     IndexedDocsRegistry::init_global(cx);
 
     CommandPaletteFilter::update_global(cx, |filter, _cx| {

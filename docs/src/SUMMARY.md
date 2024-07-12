@@ -5,7 +5,6 @@
 - [Getting Started](./getting-started.md)
   - [System Requirements](./system-requirements.md)
   - [Linux](./linux.md)
-  - [Telemetry](./telemetry.md)
   - [Additional Learning Materials](./additional-learning-materials.md)
 
 # Configuration
