@@ -4,7 +4,6 @@ use crate::{
     LanguageModelRequestMessage, Role, StreamingDiff,
 };
 use anyhow::{anyhow, Context as _, Result};
-use client::telemetry::Telemetry;
 use collections::{hash_map, HashMap, HashSet, VecDeque};
 use editor::{
     actions::{MoveDown, MoveUp, SelectAll},
@@ -41,8 +40,8 @@ use ui::{prelude::*, ContextMenu, PopoverMenu, Tooltip};
 use util::RangeExt;
 use workspace::{notifications::NotificationId, Toast, Workspace};
 
-pub fn init(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>, cx: &mut AppContext) {
-    cx.set_global(InlineAssistant::new(fs, telemetry));
+pub fn init(fs: Arc<dyn Fs>, cx: &mut AppContext) {
+    cx.set_global(InlineAssistant::new(fs));
 }
 
 const PROMPT_HISTORY_MAX_LEN: usize = 20;
@@ -54,14 +53,13 @@ pub struct InlineAssistant {
     assists_by_editor: HashMap<WeakView<Editor>, EditorInlineAssists>,
     assist_groups: HashMap<InlineAssistGroupId, InlineAssistGroup>,
     prompt_history: VecDeque<String>,
-    telemetry: Option<Arc<Telemetry>>,
     fs: Arc<dyn Fs>,
 }
 
 impl Global for InlineAssistant {}
 
 impl InlineAssistant {
-    pub fn new(fs: Arc<dyn Fs>, telemetry: Arc<Telemetry>) -> Self {
+    pub fn new(fs: Arc<dyn Fs>) -> Self {
         Self {
             next_assist_id: InlineAssistId::default(),
             next_assist_group_id: InlineAssistGroupId::default(),
@@ -69,7 +67,6 @@ impl InlineAssistant {
             assists_by_editor: HashMap::default(),
             assist_groups: HashMap::default(),
             prompt_history: VecDeque::default(),
-            telemetry: Some(telemetry),
             fs,
         }
     }
@@ -142,7 +139,6 @@ impl InlineAssistant {
                 Codegen::new(
                     editor.read(cx).buffer().clone(),
                     range.clone(),
-                    self.telemetry.clone(),
                     cx,
                 )
             });
@@ -1886,7 +1882,6 @@ pub struct Codegen {
     status: CodegenStatus,
     generation: Task<()>,
     diff: Diff,
-    telemetry: Option<Arc<Telemetry>>,
     _subscription: gpui::Subscription,
 }
 
@@ -1911,7 +1906,6 @@ impl Codegen {
     pub fn new(
         buffer: Model<MultiBuffer>,
         range: Range<Anchor>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut ModelContext<Self>,
     ) -> Self {
         let snapshot = buffer.read(cx).snapshot(cx);
@@ -1947,7 +1941,6 @@ impl Codegen {
             status: CodegenStatus::Idle,
             generation: Task::ready(()),
             diff: Diff::default(),
-            telemetry,
             _subscription: cx.subscribe(&buffer, Self::handle_buffer_event),
         }
     }
@@ -1985,9 +1978,7 @@ impl Codegen {
             .next()
             .unwrap_or_else(|| snapshot.indent_size_for_line(MultiBufferRow(selection_start.row)));
 
-        let model_telemetry_id = prompt.model.telemetry_id();
         let response = CompletionProvider::global(cx).complete(prompt);
-        let telemetry = self.telemetry.clone();
         self.edit_position = range.start;
         self.diff = Diff::default();
         self.status = CodegenStatus::Pending;
@@ -2078,18 +2069,6 @@ impl Codegen {
                             };
 
                             let result = diff.await;
-
-                            let error_message =
-                                result.as_ref().err().map(|error| error.to_string());
-                            if let Some(telemetry) = telemetry {
-                                telemetry.report_assistant_event(
-                                    None,
-                                    telemetry_events::AssistantKind::Inline,
-                                    model_telemetry_id,
-                                    response_latency,
-                                    error_message,
-                                );
-                            }
 
                             result?;
                             Ok(())

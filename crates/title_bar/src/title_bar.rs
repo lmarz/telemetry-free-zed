@@ -646,7 +646,6 @@ impl TitleBar {
                             )
                             .action("Give Feedback", Box::new(feedback::GiveFeedback))
                             .action("Check for Updates", Box::new(auto_update::Check))
-                            .action("View Telemetry", Box::new(zed_actions::OpenTelemetryLog))
                             .action(
                                 "View Dependency Licenses",
                                 Box::new(zed_actions::OpenLicenses),

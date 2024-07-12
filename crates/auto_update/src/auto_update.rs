@@ -1,7 +1,7 @@
 mod update_notification;
 
 use anyhow::{anyhow, Context, Result};
-use client::{Client, TelemetrySettings, ZED_APP_PATH};
+use client::{ZED_APP_PATH};
 use db::kvp::KEY_VALUE_STORE;
 use db::RELEASE_CHANNEL;
 use editor::{Editor, MultiBuffer};
@@ -511,10 +511,10 @@ async fn download_release(
     let mut target_file = File::create(&target_path).await?;
 
     let (installation_id, release_channel, telemetry) = cx.update(|cx| {
-        let installation_id = Client::global(cx).telemetry().installation_id();
+        let installation_id = None;
         let release_channel =
             ReleaseChannel::try_global(cx).map(|release_channel| release_channel.display_name());
-        let telemetry = TelemetrySettings::get_global(cx).metrics;
+        let telemetry = false;
 
         (installation_id, release_channel, telemetry)
     })?;

@@ -416,7 +416,6 @@ dependencies = [
  "smol",
  "strsim 0.11.1",
  "strum",
- "telemetry_events",
  "terminal",
  "terminal_view",
  "theme",
@@ -2377,7 +2376,6 @@ dependencies = [
  "sha2 0.10.7",
  "smol",
  "sysinfo",
- "telemetry_events",
  "tempfile",
  "text",
  "thiserror",
@@ -2530,7 +2528,6 @@ dependencies = [
  "sqlx",
  "subtle",
  "supermaven_api",
- "telemetry_events",
  "text",
  "theme",
  "time",
@@ -10659,14 +10656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "telemetry_events"
-version = "0.1.0"
-dependencies = [
- "semantic_version",
- "serde",
-]
-
-[[package]]
 name = "tempfile"
 version = "3.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13640,7 +13629,6 @@ dependencies = [
  "tab_switcher",
  "task",
  "tasks_ui",
- "telemetry_events",
  "terminal_view",
  "theme",
  "theme_selector",

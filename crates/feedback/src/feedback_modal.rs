@@ -295,10 +295,9 @@ impl FeedbackModal {
             }
         }
 
-        let telemetry = zed_client.telemetry();
-        let metrics_id = telemetry.metrics_id();
-        let installation_id = telemetry.installation_id();
-        let is_staff = telemetry.is_staff();
+        let metrics_id = None;
+        let installation_id = None;
+        let is_staff = None;
         let http_client = zed_client.http_client();
         let feedback_endpoint = http_client.build_url("/api/feedback");
         let request = FeedbackRequestBody {

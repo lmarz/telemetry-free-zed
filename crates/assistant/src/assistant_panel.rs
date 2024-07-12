@@ -16,7 +16,6 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use assistant_slash_command::{SlashCommand, SlashCommandOutput, SlashCommandOutputSection};
-use client::telemetry::Telemetry;
 use collections::{BTreeSet, HashMap, HashSet};
 use editor::{
     actions::{FoldAt, MoveToEndOfLine, Newline, ShowCompletions, UnfoldAt},
@@ -59,7 +58,6 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use telemetry_events::AssistantKind;
 use terminal_view::{terminal_panel::TerminalPanel, TerminalView};
 use ui::{
     prelude::*, ButtonLike, ContextMenu, Disclosure, ElevationIndex, KeyBinding, ListItem,
@@ -112,7 +110,6 @@ pub struct AssistantPanel {
     languages: Arc<LanguageRegistry>,
     slash_commands: Arc<SlashCommandRegistry>,
     fs: Arc<dyn Fs>,
-    telemetry: Arc<Telemetry>,
     _subscriptions: Vec<Subscription>,
     authentication_prompt: Option<AnyView>,
     model_menu_handle: PopoverMenuHandle<ContextMenu>,
@@ -289,7 +286,6 @@ impl AssistantPanel {
                         languages: workspace.app_state().languages.clone(),
                         slash_commands: SlashCommandRegistry::global(cx),
                         fs: workspace.app_state().fs.clone(),
-                        telemetry: workspace.client().telemetry().clone(),
                         width: None,
                         height: None,
                         _subscriptions: subscriptions,
@@ -782,7 +778,6 @@ impl AssistantPanel {
         let workspace = self.workspace.clone();
         let slash_commands = self.slash_commands.clone();
         let languages = self.languages.clone();
-        let telemetry = self.telemetry.clone();
 
         let lsp_adapter_delegate = workspace
             .update(cx, |workspace, cx| {
@@ -798,7 +793,6 @@ impl AssistantPanel {
                 path.clone(),
                 languages,
                 slash_commands,
-                Some(telemetry),
                 &mut cx,
             )
             .await?;
@@ -1125,7 +1119,6 @@ pub struct Context {
     pending_save: Task<Result<()>>,
     path: Option<PathBuf>,
     _subscriptions: Vec<Subscription>,
-    telemetry: Option<Arc<Telemetry>>,
     slash_command_registry: Arc<SlashCommandRegistry>,
     language_registry: Arc<LanguageRegistry>,
 }
@@ -1136,7 +1129,6 @@ impl Context {
     fn new(
         language_registry: Arc<LanguageRegistry>,
         slash_command_registry: Arc<SlashCommandRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut ModelContext<Self>,
     ) -> Self {
         let buffer = cx.new_model(|cx| {
@@ -1166,7 +1158,6 @@ impl Context {
             pending_save: Task::ready(Ok(())),
             path: None,
             buffer,
-            telemetry,
             language_registry,
             slash_command_registry,
         };
@@ -1234,7 +1225,6 @@ impl Context {
         path: PathBuf,
         language_registry: Arc<LanguageRegistry>,
         slash_command_registry: Arc<SlashCommandRegistry>,
-        telemetry: Option<Arc<Telemetry>>,
         cx: &mut AsyncAppContext,
     ) -> Result<Model<Self>> {
         let id = match saved_context.id {
@@ -1304,7 +1294,6 @@ impl Context {
                 pending_save: Task::ready(Ok(())),
                 path: Some(path),
                 buffer,
-                telemetry,
                 language_registry,
                 slash_command_registry,
             };
@@ -1768,17 +1757,6 @@ impl Context {
                                     MessageStatus::Error(SharedString::from(error_message.clone()));
                             } else {
                                 metadata.status = MessageStatus::Done;
-                            }
-
-                            if let Some(telemetry) = this.telemetry.as_ref() {
-                                let model = CompletionProvider::global(cx).model();
-                                telemetry.report_assistant_event(
-                                    this.id.clone(),
-                                    AssistantKind::Panel,
-                                    model.telemetry_id(),
-                                    response_latency,
-                                    error_message,
-                                );
                             }
 
                             cx.emit(ContextEvent::MessagesEdited);
@@ -2307,7 +2285,6 @@ impl ContextEditor {
         workspace: View<Workspace>,
         cx: &mut ViewContext<Self>,
     ) -> Self {
-        let telemetry = workspace.read(cx).client().telemetry().clone();
         let project = workspace.read(cx).project().clone();
         let lsp_adapter_delegate = make_lsp_adapter_delegate(&project, cx).log_err();
 
@@ -2315,7 +2292,6 @@ impl ContextEditor {
             Context::new(
                 language_registry,
                 slash_command_registry,
-                Some(telemetry),
                 cx,
             )
         });

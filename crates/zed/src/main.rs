@@ -41,8 +41,7 @@ use std::{
 };
 use theme::{ActiveTheme, SystemAppearance, ThemeRegistry, ThemeSettings};
 use util::{maybe, parse_env_output, with_clone, ResultExt, TryFutureExt};
-use uuid::Uuid;
-use welcome::{show_welcome_view, BaseKeymap, FIRST_OPEN};
+use welcome::{show_welcome_view, FIRST_OPEN};
 use workspace::{AppState, WorkspaceSettings, WorkspaceStore};
 use zed::{
     app_menus, build_window_options, handle_cli_connection, handle_keymap_file_changes,
@@ -217,7 +216,7 @@ fn init_ui(app_state: Arc<AppState>, cx: &mut AppContext) -> Result<()> {
     );
     supermaven::init(app_state.client.clone(), cx);
 
-    inline_completion_registry::init(app_state.client.telemetry().clone(), cx);
+    inline_completion_registry::init(cx);
 
     assistant::init(app_state.fs.clone(), app_state.client.clone(), cx);
 
@@ -248,10 +247,6 @@ fn init_ui(app_state: Arc<AppState>, cx: &mut AppContext) -> Result<()> {
         }
     })
     .detach();
-    let telemetry = app_state.client.telemetry();
-    telemetry.report_setting_event("theme", cx.theme().name.to_string());
-    telemetry.report_setting_event("keymap", BaseKeymap::get_global(cx).to_string());
-    telemetry.flush_events();
 
     extension::init(
         app_state.fs.clone(),
@@ -295,15 +290,8 @@ fn main() {
     log::info!("========== starting zed ==========");
     let app = App::new().with_assets(Assets);
 
-    let (installation_id, existing_installation_id_found) = app
-        .background_executor()
-        .block(installation_id())
-        .ok()
-        .unzip();
-    let session_id = Uuid::new_v4().to_string();
-
     let app_version = AppVersion::init(env!("CARGO_PKG_VERSION"));
-    reliability::init_panic_hook(installation_id.clone(), app_version, session_id.clone());
+    reliability::init_panic_hook();
 
     let (open_listener, mut open_rx) = OpenListener::new();
 
@@ -414,15 +402,6 @@ fn main() {
         project::Project::init(&client, cx);
         client::init(&client, cx);
         language::init(cx);
-        let telemetry = client.telemetry();
-        telemetry.start(installation_id.clone(), session_id, cx);
-        telemetry.report_app_event(
-            match existing_installation_id_found {
-                Some(false) => "first open",
-                _ => "open",
-            }
-            .to_string(),
-        );
         let app_state = Arc::new(AppState {
             languages: languages.clone(),
             client: client.clone(),
@@ -436,7 +415,7 @@ fn main() {
 
         auto_update::init(client.http_client(), cx);
 
-        reliability::init(client.http_client(), installation_id, cx);
+        reliability::init(cx);
 
         let args = Args::parse();
         let urls: Vec<_> = args
@@ -603,32 +582,6 @@ async fn authenticate(client: Arc<Client>, cx: &AsyncAppContext) -> Result<()> {
         client.authenticate_and_connect(true, &cx).await?;
     }
     Ok::<_, anyhow::Error>(())
-}
-
-async fn installation_id() -> Result<(String, bool)> {
-    let legacy_key_name = "device_id".to_string();
-    let key_name = "installation_id".to_string();
-
-    // Migrate legacy key to new key
-    if let Ok(Some(installation_id)) = KEY_VALUE_STORE.read_kvp(&legacy_key_name) {
-        KEY_VALUE_STORE
-            .write_kvp(key_name, installation_id.clone())
-            .await?;
-        KEY_VALUE_STORE.delete_kvp(legacy_key_name).await?;
-        return Ok((installation_id, true));
-    }
-
-    if let Ok(Some(installation_id)) = KEY_VALUE_STORE.read_kvp(&key_name) {
-        return Ok((installation_id, true));
-    }
-
-    let installation_id = Uuid::new_v4().to_string();
-
-    KEY_VALUE_STORE
-        .write_kvp(key_name, installation_id.clone())
-        .await?;
-
-    Ok((installation_id, false))
 }
 
 async fn restore_or_create_workspace(

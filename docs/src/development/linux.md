@@ -106,7 +106,7 @@ However, we realize that many distros have other priorities. We want to work wit
 * There are a couple of other `zed` binaries that may be present on linux systems ([1](https://openzfs.github.io/openzfs-docs/man/v2.2/8/zed.8.html), [2](https://zed.brimdata.io/docs/commands/zed)). If you want to rename our CLI binary because of these issues, we suggest `zedit`, `zeditor`, or `zed-cli`.
 * Zed automatically installs the correct version of common developer tools in the same way as rustup/rbenv/pyenv, etc. We understand that this is contentious, [see here](https://github.com/zed-industries/zed/issues/12589).
 * We allow users to install extensions on their own and from [zed-industries/extensions](https://github.com/zed-industries/extensions). These extensions may install further tooling as needed, such as language servers. In the long run we would like to make this safer, [see here](https://github.com/zed-industries/zed/issues/12358).
-* Zed connects to a number of online services by default (AI, telemetry, collaboration). AI and our telemetry can be disabled by your users with their own zed settings or by patching our [default settings file](https://github.com/zed-industries/zed/blob/main/assets/settings/default.json).
+* Zed connects to a number of online services by default (AI, collaboration). AI can be disabled by your users with their own zed settings or by patching our [default settings file](https://github.com/zed-industries/zed/blob/main/assets/settings/default.json).
 * As a result of the above, zed currently does not play nice with sandboxes, [see here](https://github.com/zed-industries/zed/pull/12006#issuecomment-2130421220)
 
 ## Flatpak

@@ -7818,11 +7818,6 @@ impl Project {
                         worktree.read(cx).id(),
                         changes.clone(),
                     ));
-
-                    let worktree_id = worktree.update(cx, |worktree, _| worktree.id());
-                    this.client()
-                        .telemetry()
-                        .report_discovered_project_events(worktree_id, changes);
                 }
                 worktree::Event::UpdatedGitRepositories(updated_repos) => {
                     if is_local {
