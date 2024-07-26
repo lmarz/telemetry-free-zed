@@ -21,6 +21,7 @@ use gpui::{
     App, AppContext, AsyncAppContext, Context, Global, Task, UpdateGlobal as _, VisualContext,
 };
 use image_viewer;
+use indexed_docs::IndexedDocsRegistry;
 use language::LanguageRegistry;
 use log::LevelFilter;
 
@@ -48,8 +49,6 @@ use zed::{
     app_menus, build_window_options, handle_cli_connection, handle_keymap_file_changes,
     initialize_workspace, open_paths_with_positions, OpenListener, OpenRequest,
 };
-
-use crate::zed::inline_completion_registry;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -164,9 +163,8 @@ fn init_common(app_state: Arc<AppState>, cx: &mut AppContext) {
     theme::init(theme::LoadThemes::All(Box::new(Assets)), cx);
     command_palette::init(cx);
     snippet_provider::init(cx);
-    supermaven::init(app_state.client.clone(), cx);
-    inline_completion_registry::init(cx);
-    assistant::init(app_state.fs.clone(), app_state.client.clone(), cx);
+    assistant_slash_command::init(cx);
+    IndexedDocsRegistry::init_global(cx);
     repl::init(cx);
     extension::init(
         app_state.fs.clone(),
@@ -230,15 +228,6 @@ fn init_ui(app_state: Arc<AppState>, cx: &mut AppContext) -> Result<()> {
     markdown_preview::init(cx);
     welcome::init(cx);
     extensions_ui::init(cx);
-
-    // Initialize each completion provider. Settings are used for toggling between them.
-    let copilot_language_server_id = app_state.languages.next_language_server_id();
-    copilot::init(
-        copilot_language_server_id,
-        app_state.client.http_client(),
-        app_state.node_runtime.clone(),
-        cx,
-    );
 
     cx.observe_global::<SettingsStore>({
         let languages = app_state.languages.clone();

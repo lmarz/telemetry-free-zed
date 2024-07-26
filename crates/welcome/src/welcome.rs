@@ -129,13 +129,6 @@ impl Render for WelcomePage {
                                 )
                             })
                             .child(
-                                Button::new("sign-in-to-copilot", "Sign in to GitHub Copilot")
-                                    .full_width()
-                                    .on_click(cx.listener(|_, _, cx| {
-                                        inline_completion_button::initiate_sign_in(cx);
-                                    })),
-                            )
-                            .child(
                                 Button::new("explore extensions", "Explore extensions")
                                     .full_width()
                                     .on_click(cx.listener(|_, _, cx| {

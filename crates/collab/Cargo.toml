@@ -18,7 +18,6 @@ sqlite = ["sea-orm/sqlx-sqlite", "sqlx/sqlite"]
 test-support = ["sqlite"]
 
 [dependencies]
-anthropic.workspace = true
 anyhow.workspace = true
 async-tungstenite = "0.16"
 aws-config = { version = "1.1.5" }
@@ -33,14 +32,11 @@ collections.workspace = true
 dashmap = "5.4"
 envy = "0.4.2"
 futures.workspace = true
-google_ai.workspace = true
 hex.workspace = true
 http.workspace = true
 live_kit_server.workspace = true
 log.workspace = true
 nanoid.workspace = true
-open_ai.workspace = true
-supermaven_api.workspace = true
 parking_lot.workspace = true
 prometheus = "0.13"
 prost.workspace = true
@@ -71,7 +67,6 @@ util.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-assistant = { workspace = true, features = ["test-support"] }
 async-trait.workspace = true
 audio.workspace = true
 call = { workspace = true, features = ["test-support"] }

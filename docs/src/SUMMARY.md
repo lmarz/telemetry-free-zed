@@ -16,7 +16,6 @@
 
 # Using Zed
 
-- [Assistant Panel](./assistant-panel.md)
 - [Channels](./channels.md)
 - [Collaboration](./collaboration.md)
 - [Git](./git.md)

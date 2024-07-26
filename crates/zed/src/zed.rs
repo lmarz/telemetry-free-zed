@@ -1,5 +1,4 @@
 mod app_menus;
-pub mod inline_completion_registry;
 #[cfg(target_os = "linux")]
 pub(crate) mod linux_prompts;
 #[cfg(not(target_os = "linux"))]
@@ -138,10 +137,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
         })
         .detach();
 
-        let inline_completion_button = cx.new_view(|cx| {
-            inline_completion_button::InlineCompletionButton::new(app_state.fs.clone(), cx)
-        });
-
         let diagnostic_summary =
             cx.new_view(|cx| diagnostics::items::DiagnosticIndicator::new(workspace, cx));
         let activity_indicator =
@@ -154,7 +149,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
         workspace.status_bar().update(cx, |status_bar, cx| {
             status_bar.add_left_item(diagnostic_summary, cx);
             status_bar.add_left_item(activity_indicator, cx);
-            status_bar.add_right_item(inline_completion_button, cx);
             status_bar.add_right_item(active_buffer_language, cx);
             status_bar.add_right_item(vim_mode_indicator, cx);
             status_bar.add_right_item(cursor_position, cx);
@@ -195,9 +189,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
         }
 
         cx.spawn(|workspace_handle, mut cx| async move {
-            let assistant_panel =
-                assistant::AssistantPanel::load(workspace_handle.clone(), cx.clone());
-
             let runtime_panel = repl::RuntimePanel::load(workspace_handle.clone(), cx.clone());
 
             let project_panel = ProjectPanel::load(workspace_handle.clone(), cx.clone());
@@ -216,7 +207,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
                 project_panel,
                 outline_panel,
                 terminal_panel,
-                assistant_panel,
                 runtime_panel,
                 channels_panel,
                 chat_panel,
@@ -225,7 +215,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
                 project_panel,
                 outline_panel,
                 terminal_panel,
-                assistant_panel,
                 runtime_panel,
                 channels_panel,
                 chat_panel,
@@ -233,7 +222,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
             )?;
 
             workspace_handle.update(&mut cx, |workspace, cx| {
-                workspace.add_panel(assistant_panel, cx);
                 workspace.add_panel(runtime_panel, cx);
                 workspace.add_panel(project_panel, cx);
                 workspace.add_panel(outline_panel, cx);
@@ -3217,7 +3205,6 @@ mod tests {
             project_panel::init((), cx);
             outline_panel::init((), cx);
             terminal_view::init(cx);
-            assistant::init(app_state.fs.clone(), app_state.client.clone(), cx);
             repl::init(cx);
             tasks_ui::init(cx);
             initialize_workspace(app_state.clone(), cx);
