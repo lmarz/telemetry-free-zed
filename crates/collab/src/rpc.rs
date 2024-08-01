@@ -10,7 +10,7 @@ use crate::{
         ServerId, UpdatedChannelMessage, User, UserId,
     },
     executor::Executor,
-    AppState, Config, Error, RateLimit, RateLimiter, Result,
+    AppState, Error, Result,
 };
 use anyhow::{anyhow, bail, Context as _};
 use async_tungstenite::tungstenite::{
@@ -32,9 +32,6 @@ use axum::{
 use collections::{HashMap, HashSet};
 pub use connection_pool::{ConnectionPool, ZedVersion};
 use core::fmt::{self, Debug, Formatter};
-use open_ai::{OpenAiEmbeddingModel, OPEN_AI_API_URL};
-use sha2::Digest;
-use supermaven_api::{CreateExternalUserRequest, SupermavenAdminApi};
 
 use futures::{
     channel::oneshot,
@@ -42,7 +39,6 @@ use futures::{
     stream::FuturesUnordered,
     FutureExt, SinkExt, StreamExt, TryStreamExt,
 };
-use http_client::IsahcHttpClient;
 use prometheus::{register_int_gauge, IntGauge};
 use rpc::{
     proto::{
@@ -103,18 +99,6 @@ impl<R: RequestMessage> Response<R> {
     }
 }
 
-struct StreamingResponse<R: RequestMessage> {
-    peer: Arc<Peer>,
-    receipt: Receipt<R>,
-}
-
-impl<R: RequestMessage> StreamingResponse<R> {
-    fn send(&self, payload: R::Response) -> Result<()> {
-        self.peer.respond(self.receipt, payload)?;
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum Principal {
     User(User),
@@ -149,9 +133,6 @@ struct Session {
     peer: Arc<Peer>,
     connection_pool: Arc<parking_lot::Mutex<ConnectionPool>>,
     live_kit_client: Option<Arc<dyn live_kit_server::api::Client>>,
-    supermaven_client: Option<Arc<SupermavenAdminApi>>,
-    http_client: Arc<IsahcHttpClient>,
-    rate_limiter: Arc<RateLimiter>,
     _executor: Executor,
 }
 
@@ -188,14 +169,6 @@ impl Session {
             Principal::User(user) => Some(user.id),
             Principal::Impersonated { user, .. } => Some(user.id),
             Principal::DevServer(_) => None,
-        }
-    }
-
-    fn is_staff(&self) -> bool {
-        match &self.principal {
-            Principal::User(user) => user.admin,
-            Principal::Impersonated { .. } => true,
-            Principal::DevServer(_) => false,
         }
     }
 
@@ -242,14 +215,6 @@ impl UserSession {
     }
     pub fn user_id(&self) -> UserId {
         self.0.user_id().unwrap()
-    }
-
-    pub fn email(&self) -> Option<String> {
-        match &self.0.principal {
-            Principal::User(user) => user.email_address.clone(),
-            Principal::Impersonated { user, .. } => user.email_address.clone(),
-            Principal::DevServer(..) => None,
-        }
     }
 }
 
@@ -596,7 +561,6 @@ impl Server {
             .add_request_handler(user_handler(get_private_user_info))
             .add_message_handler(user_message_handler(acknowledge_channel_message))
             .add_message_handler(user_message_handler(acknowledge_buffer_version))
-            .add_request_handler(user_handler(get_supermaven_api_key))
             .add_request_handler(user_handler(
                 forward_mutating_project_request::<proto::OpenContext>,
             ))
@@ -607,58 +571,7 @@ impl Server {
                 forward_mutating_project_request::<proto::SynchronizeContexts>,
             ))
             .add_message_handler(broadcast_project_message_from_host::<proto::AdvertiseContexts>)
-            .add_message_handler(update_context)
-            .add_request_handler({
-                let app_state = app_state.clone();
-                move |request, response, session| {
-                    let app_state = app_state.clone();
-                    async move {
-                        complete_with_language_model(request, response, session, &app_state.config)
-                            .await
-                    }
-                }
-            })
-            .add_streaming_request_handler({
-                let app_state = app_state.clone();
-                move |request, response, session| {
-                    let app_state = app_state.clone();
-                    async move {
-                        stream_complete_with_language_model(
-                            request,
-                            response,
-                            session,
-                            &app_state.config,
-                        )
-                        .await
-                    }
-                }
-            })
-            .add_request_handler({
-                let app_state = app_state.clone();
-                move |request, response, session| {
-                    let app_state = app_state.clone();
-                    async move {
-                        count_language_model_tokens(request, response, session, &app_state.config)
-                            .await
-                    }
-                }
-            })
-            .add_request_handler({
-                user_handler(move |request, response, session| {
-                    get_cached_embeddings(request, response, session)
-                })
-            })
-            .add_request_handler({
-                let app_state = app_state.clone();
-                user_handler(move |request, response, session| {
-                    compute_embeddings(
-                        request,
-                        response,
-                        session,
-                        app_state.config.openai_api_key.clone(),
-                    )
-                })
-            });
+            .add_message_handler(update_context);
 
         Arc::new(server)
     }
@@ -926,40 +839,6 @@ impl Server {
         })
     }
 
-    fn add_streaming_request_handler<F, Fut, M>(&mut self, handler: F) -> &mut Self
-    where
-        F: 'static + Send + Sync + Fn(M, StreamingResponse<M>, Session) -> Fut,
-        Fut: Send + Future<Output = Result<()>>,
-        M: RequestMessage,
-    {
-        let handler = Arc::new(handler);
-        self.add_handler(move |envelope, session| {
-            let receipt = envelope.receipt();
-            let handler = handler.clone();
-            async move {
-                let peer = session.peer.clone();
-                let response = StreamingResponse {
-                    peer: peer.clone(),
-                    receipt,
-                };
-                match (handler)(envelope.payload, response, session).await {
-                    Ok(()) => {
-                        peer.end_stream(receipt)?;
-                        Ok(())
-                    }
-                    Err(error) => {
-                        let proto_err = match &error {
-                            Error::Internal(err) => err.to_proto(),
-                            _ => ErrorCode::Internal.message(format!("{}", error)).to_proto(),
-                        };
-                        peer.respond_with_error(receipt, proto_err)?;
-                        Err(error)
-                    }
-                }
-            }
-        })
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn handle_connection(
         self: &Arc<Self>,
@@ -995,24 +874,6 @@ impl Server {
             tracing::Span::current().record("connection_id", format!("{}", connection_id));
             tracing::info!("connection opened");
 
-            let user_agent = format!("Zed Server/{}", env!("CARGO_PKG_VERSION"));
-            let http_client = match IsahcHttpClient::builder().default_header("User-Agent", user_agent).build() {
-                Ok(http_client) => Arc::new(http_client),
-                Err(error) => {
-                    tracing::error!(?error, "failed to create HTTP client");
-                    return;
-                }
-            };
-
-            let supermaven_client = if let Some(supermaven_admin_api_key) = this.app_state.config.supermaven_admin_api_key.clone() {
-                Some(Arc::new(SupermavenAdminApi::new(
-                    supermaven_admin_api_key.to_string(),
-                    http_client.clone(),
-                )))
-            } else {
-                None
-            };
-
             let session = Session {
                 principal: principal.clone(),
                 connection_id,
@@ -1020,10 +881,7 @@ impl Server {
                 peer: this.peer.clone(),
                 connection_pool: this.connection_pool.clone(),
                 live_kit_client: this.app_state.live_kit_client.clone(),
-                http_client,
-                rate_limiter: this.app_state.rate_limiter.clone(),
                 _executor: executor.clone(),
-                supermaven_client,
             };
 
             if let Err(error) = this.send_initial_client_update(connection_id, &principal, zed_version, send_connection_id, &session).await {
@@ -3541,7 +3399,7 @@ async fn update_user_plan(user_id: UserId, session: &Session) -> Result<()> {
     let db = session.db().await;
     let active_subscriptions = db.get_active_billing_subscriptions(user_id).await?;
 
-    let plan = if session.is_staff() || !active_subscriptions.is_empty() {
+    let plan = if !active_subscriptions.is_empty() {
         proto::Plan::ZedPro
     } else {
         proto::Plan::Free
@@ -4529,345 +4387,6 @@ async fn acknowledge_buffer_version(
             &request.version,
         )
         .await?;
-    Ok(())
-}
-
-struct CompleteWithLanguageModelRateLimit;
-
-impl RateLimit for CompleteWithLanguageModelRateLimit {
-    fn capacity() -> usize {
-        std::env::var("COMPLETE_WITH_LANGUAGE_MODEL_RATE_LIMIT_PER_HOUR")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(120) // Picked arbitrarily
-    }
-
-    fn refill_duration() -> chrono::Duration {
-        chrono::Duration::hours(1)
-    }
-
-    fn db_name() -> &'static str {
-        "complete-with-language-model"
-    }
-}
-
-async fn complete_with_language_model(
-    request: proto::CompleteWithLanguageModel,
-    response: Response<proto::CompleteWithLanguageModel>,
-    session: Session,
-    config: &Config,
-) -> Result<()> {
-    let Some(session) = session.for_user() else {
-        return Err(anyhow!("user not found"))?;
-    };
-    authorize_access_to_language_models(&session).await?;
-
-    session
-        .rate_limiter
-        .check::<CompleteWithLanguageModelRateLimit>(session.user_id())
-        .await?;
-
-    let result = match proto::LanguageModelProvider::from_i32(request.provider) {
-        Some(proto::LanguageModelProvider::Anthropic) => {
-            let api_key = config
-                .anthropic_api_key
-                .as_ref()
-                .context("no Anthropic AI API key configured on the server")?;
-            anthropic::complete(
-                session.http_client.as_ref(),
-                anthropic::ANTHROPIC_API_URL,
-                api_key,
-                serde_json::from_str(&request.request)?,
-            )
-            .await?
-        }
-        _ => return Err(anyhow!("unsupported provider"))?,
-    };
-
-    response.send(proto::CompleteWithLanguageModelResponse {
-        completion: serde_json::to_string(&result)?,
-    })?;
-
-    Ok(())
-}
-
-async fn stream_complete_with_language_model(
-    request: proto::StreamCompleteWithLanguageModel,
-    response: StreamingResponse<proto::StreamCompleteWithLanguageModel>,
-    session: Session,
-    config: &Config,
-) -> Result<()> {
-    let Some(session) = session.for_user() else {
-        return Err(anyhow!("user not found"))?;
-    };
-    authorize_access_to_language_models(&session).await?;
-
-    session
-        .rate_limiter
-        .check::<CompleteWithLanguageModelRateLimit>(session.user_id())
-        .await?;
-
-    match proto::LanguageModelProvider::from_i32(request.provider) {
-        Some(proto::LanguageModelProvider::Anthropic) => {
-            let api_key = config
-                .anthropic_api_key
-                .as_ref()
-                .context("no Anthropic AI API key configured on the server")?;
-            let mut chunks = anthropic::stream_completion(
-                session.http_client.as_ref(),
-                anthropic::ANTHROPIC_API_URL,
-                api_key,
-                serde_json::from_str(&request.request)?,
-                None,
-            )
-            .await?;
-            while let Some(event) = chunks.next().await {
-                let chunk = event?;
-                response.send(proto::StreamCompleteWithLanguageModelResponse {
-                    event: serde_json::to_string(&chunk)?,
-                })?;
-            }
-        }
-        Some(proto::LanguageModelProvider::OpenAi) => {
-            let api_key = config
-                .openai_api_key
-                .as_ref()
-                .context("no OpenAI API key configured on the server")?;
-            let mut events = open_ai::stream_completion(
-                session.http_client.as_ref(),
-                open_ai::OPEN_AI_API_URL,
-                api_key,
-                serde_json::from_str(&request.request)?,
-                None,
-            )
-            .await?;
-            while let Some(event) = events.next().await {
-                let event = event?;
-                response.send(proto::StreamCompleteWithLanguageModelResponse {
-                    event: serde_json::to_string(&event)?,
-                })?;
-            }
-        }
-        Some(proto::LanguageModelProvider::Google) => {
-            let api_key = config
-                .google_ai_api_key
-                .as_ref()
-                .context("no Google AI API key configured on the server")?;
-            let mut events = google_ai::stream_generate_content(
-                session.http_client.as_ref(),
-                google_ai::API_URL,
-                api_key,
-                serde_json::from_str(&request.request)?,
-            )
-            .await?;
-            while let Some(event) = events.next().await {
-                let event = event?;
-                response.send(proto::StreamCompleteWithLanguageModelResponse {
-                    event: serde_json::to_string(&event)?,
-                })?;
-            }
-        }
-        None => return Err(anyhow!("unknown provider"))?,
-    }
-
-    Ok(())
-}
-
-async fn count_language_model_tokens(
-    request: proto::CountLanguageModelTokens,
-    response: Response<proto::CountLanguageModelTokens>,
-    session: Session,
-    config: &Config,
-) -> Result<()> {
-    let Some(session) = session.for_user() else {
-        return Err(anyhow!("user not found"))?;
-    };
-    authorize_access_to_language_models(&session).await?;
-
-    session
-        .rate_limiter
-        .check::<CountLanguageModelTokensRateLimit>(session.user_id())
-        .await?;
-
-    let result = match proto::LanguageModelProvider::from_i32(request.provider) {
-        Some(proto::LanguageModelProvider::Google) => {
-            let api_key = config
-                .google_ai_api_key
-                .as_ref()
-                .context("no Google AI API key configured on the server")?;
-            google_ai::count_tokens(
-                session.http_client.as_ref(),
-                google_ai::API_URL,
-                api_key,
-                serde_json::from_str(&request.request)?,
-            )
-            .await?
-        }
-        _ => return Err(anyhow!("unsupported provider"))?,
-    };
-
-    response.send(proto::CountLanguageModelTokensResponse {
-        token_count: result.total_tokens as u32,
-    })?;
-
-    Ok(())
-}
-
-struct CountLanguageModelTokensRateLimit;
-
-impl RateLimit for CountLanguageModelTokensRateLimit {
-    fn capacity() -> usize {
-        std::env::var("COUNT_LANGUAGE_MODEL_TOKENS_RATE_LIMIT_PER_HOUR")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(600) // Picked arbitrarily
-    }
-
-    fn refill_duration() -> chrono::Duration {
-        chrono::Duration::hours(1)
-    }
-
-    fn db_name() -> &'static str {
-        "count-language-model-tokens"
-    }
-}
-
-struct ComputeEmbeddingsRateLimit;
-
-impl RateLimit for ComputeEmbeddingsRateLimit {
-    fn capacity() -> usize {
-        std::env::var("EMBED_TEXTS_RATE_LIMIT_PER_HOUR")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(5000) // Picked arbitrarily
-    }
-
-    fn refill_duration() -> chrono::Duration {
-        chrono::Duration::hours(1)
-    }
-
-    fn db_name() -> &'static str {
-        "compute-embeddings"
-    }
-}
-
-async fn compute_embeddings(
-    request: proto::ComputeEmbeddings,
-    response: Response<proto::ComputeEmbeddings>,
-    session: UserSession,
-    api_key: Option<Arc<str>>,
-) -> Result<()> {
-    let api_key = api_key.context("no OpenAI API key configured on the server")?;
-    authorize_access_to_language_models(&session).await?;
-
-    session
-        .rate_limiter
-        .check::<ComputeEmbeddingsRateLimit>(session.user_id())
-        .await?;
-
-    let embeddings = match request.model.as_str() {
-        "openai/text-embedding-3-small" => {
-            open_ai::embed(
-                session.http_client.as_ref(),
-                OPEN_AI_API_URL,
-                &api_key,
-                OpenAiEmbeddingModel::TextEmbedding3Small,
-                request.texts.iter().map(|text| text.as_str()),
-            )
-            .await?
-        }
-        provider => return Err(anyhow!("unsupported embedding provider {:?}", provider))?,
-    };
-
-    let embeddings = request
-        .texts
-        .iter()
-        .map(|text| {
-            let mut hasher = sha2::Sha256::new();
-            hasher.update(text.as_bytes());
-            let result = hasher.finalize();
-            result.to_vec()
-        })
-        .zip(
-            embeddings
-                .data
-                .into_iter()
-                .map(|embedding| embedding.embedding),
-        )
-        .collect::<HashMap<_, _>>();
-
-    let db = session.db().await;
-    db.save_embeddings(&request.model, &embeddings)
-        .await
-        .context("failed to save embeddings")
-        .trace_err();
-
-    response.send(proto::ComputeEmbeddingsResponse {
-        embeddings: embeddings
-            .into_iter()
-            .map(|(digest, dimensions)| proto::Embedding { digest, dimensions })
-            .collect(),
-    })?;
-    Ok(())
-}
-
-async fn get_cached_embeddings(
-    request: proto::GetCachedEmbeddings,
-    response: Response<proto::GetCachedEmbeddings>,
-    session: UserSession,
-) -> Result<()> {
-    authorize_access_to_language_models(&session).await?;
-
-    let db = session.db().await;
-    let embeddings = db.get_embeddings(&request.model, &request.digests).await?;
-
-    response.send(proto::GetCachedEmbeddingsResponse {
-        embeddings: embeddings
-            .into_iter()
-            .map(|(digest, dimensions)| proto::Embedding { digest, dimensions })
-            .collect(),
-    })?;
-    Ok(())
-}
-
-async fn authorize_access_to_language_models(session: &UserSession) -> Result<(), Error> {
-    let db = session.db().await;
-    let flags = db.get_user_flags(session.user_id()).await?;
-    if flags.iter().any(|flag| flag == "language-models") {
-        Ok(())
-    } else {
-        Err(anyhow!("permission denied"))?
-    }
-}
-
-/// Get a Supermaven API key for the user
-async fn get_supermaven_api_key(
-    _request: proto::GetSupermavenApiKey,
-    response: Response<proto::GetSupermavenApiKey>,
-    session: UserSession,
-) -> Result<()> {
-    let user_id: String = session.user_id().to_string();
-    if !session.is_staff() {
-        return Err(anyhow!("supermaven not enabled for this account"))?;
-    }
-
-    let email = session
-        .email()
-        .ok_or_else(|| anyhow!("user must have an email"))?;
-
-    let supermaven_admin_api = session
-        .supermaven_client
-        .as_ref()
-        .ok_or_else(|| anyhow!("supermaven not configured"))?;
-
-    let result = supermaven_admin_api
-        .try_get_or_create_user(CreateExternalUserRequest { id: user_id, email })
-        .await?;
-
-    response.send(proto::GetSupermavenApiKeyResponse {
-        api_key: result.api_key,
-    })?;
-
     Ok(())
 }
 
