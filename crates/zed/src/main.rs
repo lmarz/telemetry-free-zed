@@ -21,6 +21,7 @@ use gpui::{
     App, AppContext, AsyncAppContext, Context, Global, Task, UpdateGlobal as _, VisualContext,
 };
 use image_viewer;
+use indexed_docs::IndexedDocsRegistry;
 use language::LanguageRegistry;
 use log::LevelFilter;
 
@@ -43,14 +44,12 @@ use std::{
 use theme::{ActiveTheme, SystemAppearance, ThemeRegistry, ThemeSettings};
 use util::{maybe, parse_env_output, with_clone, ResultExt, TryFutureExt};
 use uuid::Uuid;
-use welcome::{show_welcome_view, BaseKeymap, FIRST_OPEN};
+use welcome::{show_welcome_view, FIRST_OPEN};
 use workspace::{AppState, WorkspaceSettings, WorkspaceStore};
 use zed::{
     app_menus, build_window_options, handle_cli_connection, handle_keymap_file_changes,
     initialize_workspace, open_paths_with_positions, open_ssh_paths, OpenListener, OpenRequest,
 };
-
-use crate::zed::inline_completion_registry;
 
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
@@ -164,16 +163,10 @@ fn init_common(app_state: Arc<AppState>, cx: &mut AppContext) {
     SystemAppearance::init(cx);
     theme::init(theme::LoadThemes::All(Box::new(Assets)), cx);
     command_palette::init(cx);
-    language_model::init(app_state.client.clone(), cx);
+    assistant_slash_command::init(cx);
+    IndexedDocsRegistry::init_global(cx);
     snippet_provider::init(cx);
-    supermaven::init(app_state.client.clone(), cx);
-    inline_completion_registry::init(app_state.client.telemetry().clone(), cx);
-    assistant::init(app_state.fs.clone(), app_state.client.clone(), cx);
-    repl::init(
-        app_state.fs.clone(),
-        app_state.client.telemetry().clone(),
-        cx,
-    );
+    repl::init(app_state.fs.clone(), cx);
     extension::init(
         app_state.fs.clone(),
         app_state.client.clone(),
@@ -238,15 +231,6 @@ fn init_ui(app_state: Arc<AppState>, cx: &mut AppContext) -> Result<()> {
     settings_ui::init(cx);
     extensions_ui::init(cx);
 
-    // Initialize each completion provider. Settings are used for toggling between them.
-    let copilot_language_server_id = app_state.languages.next_language_server_id();
-    copilot::init(
-        copilot_language_server_id,
-        app_state.client.http_client(),
-        app_state.node_runtime.clone(),
-        cx,
-    );
-
     cx.observe_global::<SettingsStore>({
         let languages = app_state.languages.clone();
         let http = app_state.client.http_client();
@@ -272,10 +256,6 @@ fn init_ui(app_state: Arc<AppState>, cx: &mut AppContext) -> Result<()> {
         }
     })
     .detach();
-    let telemetry = app_state.client.telemetry();
-    telemetry.report_setting_event("theme", cx.theme().name.to_string());
-    telemetry.report_setting_event("keymap", BaseKeymap::get_global(cx).to_string());
-    telemetry.flush_events();
 
     let fs = app_state.fs.clone();
     load_user_themes_in_background(fs.clone(), cx);
@@ -308,7 +288,7 @@ fn main() {
     log::info!("========== starting zed ==========");
     let app = App::new().with_assets(Assets);
 
-    let (installation_id, existing_installation_id_found) = app
+    let (installation_id, _) = app
         .background_executor()
         .block(installation_id())
         .ok()
@@ -434,15 +414,6 @@ fn main() {
         project::Project::init(&client, cx);
         client::init(&client, cx);
         language::init(cx);
-        let telemetry = client.telemetry();
-        telemetry.start(installation_id.clone(), session.id().to_owned(), cx);
-        telemetry.report_app_event(
-            match existing_installation_id_found {
-                Some(false) => "first open",
-                _ => "open",
-            }
-            .to_string(),
-        );
         let app_state = Arc::new(AppState {
             languages: languages.clone(),
             client: client.clone(),
@@ -456,7 +427,7 @@ fn main() {
         AppState::set_global(Arc::downgrade(&app_state), cx);
 
         auto_update::init(client.http_client(), cx);
-        reliability::init(client.http_client(), installation_id, cx);
+        reliability::init();
         init_common(app_state.clone(), cx);
 
         let args = Args::parse();

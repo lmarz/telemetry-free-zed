@@ -243,21 +243,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anthropic"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.28",
- "http_client",
- "isahc",
- "schemars",
- "serde",
- "serde_json",
- "strum",
- "tokio",
-]
-
-[[package]]
 name = "any_vec"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -364,72 +349,6 @@ dependencies = [
  "anyhow",
  "gpui",
  "rust-embed",
-]
-
-[[package]]
-name = "assistant"
-version = "0.1.0"
-dependencies = [
- "anthropic",
- "anyhow",
- "assets",
- "assistant_slash_command",
- "async-watch",
- "cargo_toml",
- "chrono",
- "client",
- "clock",
- "collections",
- "command_palette_hooks",
- "completion",
- "ctor",
- "editor",
- "env_logger",
- "feature_flags",
- "fs",
- "futures 0.3.28",
- "fuzzy",
- "gpui",
- "heed",
- "html_to_markdown 0.1.0",
- "http_client",
- "indexed_docs",
- "indoc",
- "language",
- "language_model",
- "log",
- "menu",
- "multi_buffer",
- "ollama",
- "open_ai",
- "ordered-float 2.10.0",
- "parking_lot",
- "paths",
- "picker",
- "project",
- "rand 0.8.5",
- "regex",
- "rope",
- "roxmltree 0.20.0",
- "schemars",
- "search",
- "semantic_index",
- "serde",
- "serde_json",
- "settings",
- "similar",
- "smol",
- "telemetry_events",
- "terminal",
- "terminal_view",
- "text",
- "theme",
- "toml 0.8.10",
- "ui",
- "unindent",
- "util",
- "uuid",
- "workspace",
 ]
 
 [[package]]
@@ -1570,27 +1489,12 @@ dependencies = [
 
 [[package]]
 name = "bit-set"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0700ddab506f33b20a03b13996eccd309a48e5ff77d0d95926aa0210fb4e95f1"
-dependencies = [
- "bit-vec 0.6.3",
-]
-
-[[package]]
-name = "bit-set"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0481a0e032742109b1133a095184ee93d88f3dc9e0d28a5d033dc77a073f44f"
 dependencies = [
- "bit-vec 0.7.0",
+ "bit-vec",
 ]
-
-[[package]]
-name = "bit-vec"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bit-vec"
@@ -1781,7 +1685,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c2f7349907b712260e64b0afe2f84692af14a454be26187d9df565c7f69266a"
 dependencies = [
  "memchr",
- "regex-automata 0.3.9",
  "serde",
 ]
 
@@ -2410,9 +2313,7 @@ dependencies = [
 name = "collab"
 version = "0.44.0"
 dependencies = [
- "anthropic",
  "anyhow",
- "assistant",
  "async-trait",
  "async-tungstenite",
  "audio",
@@ -2429,7 +2330,6 @@ dependencies = [
  "clock",
  "collab_ui",
  "collections",
- "completion",
  "ctor",
  "dashmap",
  "dev_server_projects",
@@ -2441,14 +2341,12 @@ dependencies = [
  "futures 0.3.28",
  "git",
  "git_hosting_providers",
- "google_ai",
  "gpui",
  "headless",
  "hex",
  "http_client",
  "indoc",
  "language",
- "language_model",
  "live_kit_client",
  "live_kit_server",
  "log",
@@ -2458,7 +2356,6 @@ dependencies = [
  "nanoid",
  "node_runtime",
  "notifications",
- "open_ai",
  "parking_lot",
  "pretty_assertions",
  "project",
@@ -2484,7 +2381,6 @@ dependencies = [
  "sha2 0.10.7",
  "sqlx",
  "subtle",
- "supermaven_api",
  "telemetry_events",
  "text",
  "theme",
@@ -2615,28 +2511,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "completion"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ctor",
- "editor",
- "env_logger",
- "futures 0.3.28",
- "gpui",
- "language",
- "language_model",
- "project",
- "rand 0.8.5",
- "serde",
- "settings",
- "smol",
- "text",
- "ui",
- "unindent",
-]
-
-[[package]]
 name = "concurrent-queue"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2697,42 +2571,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec182b0ca2f35d8fc196cf3404988fd8b8c739a4d270ff118a398feb0cbec1ca"
 dependencies = [
  "unicode-segmentation",
-]
-
-[[package]]
-name = "copilot"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-compression",
- "async-std",
- "async-tar",
- "client",
- "clock",
- "collections",
- "command_palette_hooks",
- "editor",
- "fs",
- "futures 0.3.28",
- "gpui",
- "http_client",
- "indoc",
- "language",
- "lsp",
- "menu",
- "node_runtime",
- "parking_lot",
- "paths",
- "project",
- "rpc",
- "serde",
- "serde_json",
- "settings",
- "smol",
- "theme",
- "ui",
- "util",
- "workspace",
 ]
 
 [[package]]
@@ -3962,16 +3800,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
-name = "fancy-regex"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7493d4c459da9f84325ad297371a6b2b8a162800873a22e3b6b6512e61d18c05"
-dependencies = [
- "bit-set 0.5.3",
- "regex",
-]
-
-[[package]]
 name = "fast-srgb8"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4213,7 +4041,7 @@ version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a595cb550439a117696039dfc69830492058211b771a2a165379f2a1a53d84d"
 dependencies = [
- "roxmltree 0.19.0",
+ "roxmltree",
 ]
 
 [[package]]
@@ -4751,17 +4579,6 @@ dependencies = [
  "ui",
  "util",
  "workspace",
-]
-
-[[package]]
-name = "google_ai"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.28",
- "http_client",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -5500,31 +5317,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inline_completion_button"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "copilot",
- "editor",
- "fs",
- "futures 0.3.28",
- "gpui",
- "indoc",
- "language",
- "lsp",
- "paths",
- "project",
- "serde_json",
- "settings",
- "supermaven",
- "theme",
- "ui",
- "util",
- "workspace",
- "zed_actions",
-]
-
-[[package]]
 name = "inotify"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5928,42 +5720,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "language_model"
-version = "0.1.0"
-dependencies = [
- "anthropic",
- "anyhow",
- "client",
- "collections",
- "ctor",
- "editor",
- "env_logger",
- "feature_flags",
- "futures 0.3.28",
- "gpui",
- "http_client",
- "language",
- "log",
- "menu",
- "ollama",
- "open_ai",
- "project",
- "proto",
- "rand 0.8.5",
- "schemars",
- "serde",
- "serde_json",
- "settings",
- "strum",
- "text",
- "theme",
- "tiktoken-rs",
- "ui",
- "unindent",
- "util",
-]
-
-[[package]]
 name = "language_selector"
 version = "0.1.0"
 dependencies = [
@@ -5986,7 +5742,6 @@ dependencies = [
  "anyhow",
  "client",
  "collections",
- "copilot",
  "editor",
  "env_logger",
  "futures 0.3.28",
@@ -6652,7 +6407,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09eeccb9b50f4f7839b214aa3e08be467159506a986c18e0702170ccf720a453"
 dependencies = [
  "arrayvec",
- "bit-set 0.6.0",
+ "bit-set",
  "bitflags 2.6.0",
  "cfg_aliases 0.1.1",
  "codespan-reporting",
@@ -7100,19 +6855,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ollama"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.28",
- "http_client",
- "isahc",
- "schemars",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7168,20 +6910,6 @@ dependencies = [
  "is-wsl",
  "libc",
  "pathdiff",
-]
-
-[[package]]
-name = "open_ai"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.28",
- "http_client",
- "isahc",
- "schemars",
- "serde",
- "serde_json",
- "strum",
 ]
 
 [[package]]
@@ -8224,7 +7952,6 @@ dependencies = [
 name = "quick_action_bar"
 version = "0.1.0"
 dependencies = [
- "assistant",
  "editor",
  "gpui",
  "repl",
@@ -8539,12 +8266,6 @@ checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 dependencies = [
  "regex-syntax 0.6.29",
 ]
-
-[[package]]
-name = "regex-automata"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59b23e92ee4318893fa3fe3e6fb365258efbfe6ac6ab30f090cdcbb7aa37efa9"
 
 [[package]]
 name = "regex-automata"
@@ -8863,12 +8584,6 @@ name = "roxmltree"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3cd14fd5e3b777a7422cca79358c57a8f6e3a703d9ac187448d0daf220c2407f"
-
-[[package]]
-name = "roxmltree"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rpc"
@@ -9396,7 +9111,6 @@ dependencies = [
  "client",
  "clock",
  "collections",
- "completion",
  "env_logger",
  "fs",
  "futures 0.3.28",
@@ -9407,7 +9121,6 @@ dependencies = [
  "language",
  "languages",
  "log",
- "open_ai",
  "parking_lot",
  "project",
  "serde",
@@ -10355,46 +10068,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "supermaven"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "client",
- "collections",
- "editor",
- "env_logger",
- "futures 0.3.28",
- "gpui",
- "http_client",
- "language",
- "log",
- "postage",
- "project",
- "serde",
- "serde_json",
- "settings",
- "smol",
- "supermaven_api",
- "text",
- "theme",
- "ui",
- "util",
-]
-
-[[package]]
-name = "supermaven_api"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "futures 0.3.28",
- "http_client",
- "paths",
- "serde",
- "serde_json",
- "smol",
-]
-
-[[package]]
 name = "sval"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10916,21 +10589,6 @@ dependencies = [
  "flate2",
  "jpeg-decoder",
  "weezl",
-]
-
-[[package]]
-name = "tiktoken-rs"
-version = "0.5.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c314e7ce51440f9e8f5a497394682a57b7c323d0f4d0a6b1b13c429056e0e234"
-dependencies = [
- "anyhow",
- "base64 0.21.7",
- "bstr",
- "fancy-regex",
- "lazy_static",
- "parking_lot",
- "rustc-hash",
 ]
 
 [[package]]
@@ -11855,7 +11513,7 @@ dependencies = [
  "kurbo",
  "log",
  "pico-args",
- "roxmltree 0.19.0",
+ "roxmltree",
  "simplecss",
  "siphasher 1.0.1",
  "strict-num",
@@ -12686,7 +12344,6 @@ dependencies = [
  "extensions_ui",
  "fuzzy",
  "gpui",
- "inline_completion_button",
  "install_cli",
  "picker",
  "project",
@@ -13603,7 +13260,7 @@ dependencies = [
  "anyhow",
  "ashpd",
  "assets",
- "assistant",
+ "assistant_slash_command",
  "audio",
  "auto_update",
  "backtrace",
@@ -13617,7 +13274,6 @@ dependencies = [
  "collab_ui",
  "collections",
  "command_palette",
- "copilot",
  "db",
  "dev_server_projects",
  "diagnostics",
@@ -13637,12 +13293,11 @@ dependencies = [
  "headless",
  "http_client",
  "image_viewer",
- "inline_completion_button",
+ "indexed_docs",
  "install_cli",
  "isahc",
  "journal",
  "language",
- "language_model",
  "language_selector",
  "language_tools",
  "languages",
@@ -13677,7 +13332,6 @@ dependencies = [
  "simplelog",
  "smol",
  "snippet_provider",
- "supermaven",
  "tab_switcher",
  "task",
  "tasks_ui",

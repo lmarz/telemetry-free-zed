@@ -12,17 +12,11 @@ workspace = true
 [lib]
 path = "src/semantic_index.rs"
 
-[[example]]
-name = "index"
-path = "examples/index.rs"
-crate-type = ["bin"]
-
 [dependencies]
 anyhow.workspace = true
 client.workspace = true
 clock.workspace = true
 collections.workspace = true
-completion.workspace = true
 fs.workspace = true
 futures.workspace = true
 futures-batch.workspace = true
@@ -31,7 +25,6 @@ language.workspace = true
 log.workspace = true
 heed.workspace = true
 http_client.workspace = true
-open_ai.workspace = true
 parking_lot.workspace = true
 project.workspace = true
 settings.workspace = true

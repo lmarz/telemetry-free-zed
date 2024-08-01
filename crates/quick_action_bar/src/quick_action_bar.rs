@@ -1,5 +1,3 @@
-use assistant::assistant_settings::AssistantSettings;
-use assistant::{AssistantPanel, InlineAssist};
 use editor::actions::{
     AddSelectionAbove, AddSelectionBelow, DuplicateLineDown, GoToDiagnostic, GoToHunk,
     GoToPrevDiagnostic, GoToPrevHunk, MoveLineDown, MoveLineUp, SelectAll, SelectLargerSyntaxNode,
@@ -9,16 +7,14 @@ use editor::{Editor, EditorSettings};
 
 use gpui::{
     anchored, deferred, Action, AnchorCorner, ClickEvent, DismissEvent, ElementId, EventEmitter,
-    InteractiveElement, ParentElement, Render, Styled, Subscription, View, ViewContext, WeakView,
+    InteractiveElement, ParentElement, Render, Styled, Subscription, View, ViewContext,
 };
 use search::{buffer_search, BufferSearchBar};
 use settings::{Settings, SettingsStore};
 use ui::{
     prelude::*, ButtonSize, ButtonStyle, ContextMenu, IconButton, IconName, IconSize, Tooltip,
 };
-use workspace::{
-    item::ItemHandle, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView, Workspace,
-};
+use workspace::{item::ItemHandle, ToolbarItemEvent, ToolbarItemLocation, ToolbarItemView};
 
 mod repl_menu;
 
@@ -29,16 +25,11 @@ pub struct QuickActionBar {
     toggle_selections_menu: Option<View<ContextMenu>>,
     active_item: Option<Box<dyn ItemHandle>>,
     _inlay_hints_enabled_subscription: Option<Subscription>,
-    workspace: WeakView<Workspace>,
     show: bool,
 }
 
 impl QuickActionBar {
-    pub fn new(
-        buffer_search_bar: View<BufferSearchBar>,
-        workspace: &Workspace,
-        cx: &mut ViewContext<Self>,
-    ) -> Self {
+    pub fn new(buffer_search_bar: View<BufferSearchBar>, cx: &mut ViewContext<Self>) -> Self {
         let mut this = Self {
             buffer_search_bar,
             toggle_settings_menu: None,
@@ -46,7 +37,6 @@ impl QuickActionBar {
             repl_menu: None,
             active_item: None,
             _inlay_hints_enabled_subscription: None,
-            workspace: workspace.weak_handle(),
             show: true,
         };
         this.apply_settings(cx);
@@ -137,24 +127,6 @@ impl Render for QuickActionBar {
                 },
             )
         });
-
-        let assistant_button = QuickActionBarButton::new(
-            "toggle inline assistant",
-            IconName::MagicWand,
-            false,
-            Box::new(InlineAssist::default()),
-            "Inline Assist",
-            {
-                let workspace = self.workspace.clone();
-                move |_, cx| {
-                    if let Some(workspace) = workspace.upgrade() {
-                        workspace.update(cx, |workspace, cx| {
-                            AssistantPanel::inline_assist(workspace, &InlineAssist::default(), cx);
-                        });
-                    }
-                }
-            },
-        );
 
         let editor_selections_dropdown = selection_menu_enabled.then(|| {
             IconButton::new("toggle_editor_selections_icon", IconName::TextCursor)
@@ -304,12 +276,7 @@ impl Render for QuickActionBar {
             .child(
                 h_flex()
                     .gap(Spacing::Medium.rems(cx))
-                    .children(self.render_repl_menu(cx))
-                    .when(
-                        AssistantSettings::get_global(cx).enabled
-                            && AssistantSettings::get_global(cx).button,
-                        |bar| bar.child(assistant_button),
-                    ),
+                    .children(self.render_repl_menu(cx)),
             )
             .child(
                 h_flex()

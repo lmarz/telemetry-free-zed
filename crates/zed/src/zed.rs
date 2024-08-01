@@ -1,5 +1,4 @@
 mod app_menus;
-pub mod inline_completion_registry;
 #[cfg(target_os = "linux")]
 pub(crate) mod linux_prompts;
 #[cfg(not(target_os = "linux"))]
@@ -124,11 +123,11 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
     cx.observe_new_views(move |workspace: &mut Workspace, cx| {
         let workspace_handle = cx.view().clone();
         let center_pane = workspace.active_pane().clone();
-        initialize_pane(workspace, &center_pane, cx);
+        initialize_pane(&center_pane, cx);
         cx.subscribe(&workspace_handle, {
             move |workspace, _, event, cx| match event {
                 workspace::Event::PaneAdded(pane) => {
-                    initialize_pane(workspace, pane, cx);
+                    initialize_pane(pane, cx);
                 }
                 workspace::Event::OpenBundledFile {
                     text,
@@ -183,10 +182,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
             }
         }
 
-        let inline_completion_button = cx.new_view(|cx| {
-            inline_completion_button::InlineCompletionButton::new(app_state.fs.clone(), cx)
-        });
-
         let diagnostic_summary =
             cx.new_view(|cx| diagnostics::items::DiagnosticIndicator::new(workspace, cx));
         let activity_indicator =
@@ -199,7 +194,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
         workspace.status_bar().update(cx, |status_bar, cx| {
             status_bar.add_left_item(diagnostic_summary, cx);
             status_bar.add_left_item(activity_indicator, cx);
-            status_bar.add_right_item(inline_completion_button, cx);
             status_bar.add_right_item(active_buffer_language, cx);
             status_bar.add_right_item(vim_mode_indicator, cx);
             status_bar.add_right_item(cursor_position, cx);
@@ -240,8 +234,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
         }
 
         cx.spawn(|workspace_handle, mut cx| async move {
-            let assistant_panel =
-                assistant::AssistantPanel::load(workspace_handle.clone(), cx.clone());
 
             let project_panel = ProjectPanel::load(workspace_handle.clone(), cx.clone());
             let outline_panel = OutlinePanel::load(workspace_handle.clone(), cx.clone());
@@ -259,7 +251,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
                 project_panel,
                 outline_panel,
                 terminal_panel,
-                assistant_panel,
                 channels_panel,
                 chat_panel,
                 notification_panel,
@@ -267,14 +258,12 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
                 project_panel,
                 outline_panel,
                 terminal_panel,
-                assistant_panel,
                 channels_panel,
                 chat_panel,
                 notification_panel,
             )?;
 
             workspace_handle.update(&mut cx, |workspace, cx| {
-                workspace.add_panel(assistant_panel, cx);
                 workspace.add_panel(project_panel, cx);
                 workspace.add_panel(outline_panel, cx);
                 workspace.add_panel(terminal_panel, cx);
@@ -402,13 +391,6 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
                 );
             })
             .register_action(
-                move |workspace: &mut Workspace,
-                      _: &zed_actions::OpenTelemetryLog,
-                      cx: &mut ViewContext<Workspace>| {
-                    open_telemetry_log_file(workspace, cx);
-                },
-            )
-            .register_action(
                 move |_: &mut Workspace,
                       _: &zed_actions::OpenKeymap,
                       cx: &mut ViewContext<Workspace>| {
@@ -532,7 +514,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut AppContext) {
     .detach();
 }
 
-fn initialize_pane(workspace: &mut Workspace, pane: &View<Pane>, cx: &mut ViewContext<Workspace>) {
+fn initialize_pane(pane: &View<Pane>, cx: &mut ViewContext<Workspace>) {
     pane.update(cx, |pane, cx| {
         pane.toolbar().update(cx, |toolbar, cx| {
             let multibuffer_hint = cx.new_view(|_| MultibufferHint::new());
@@ -542,8 +524,7 @@ fn initialize_pane(workspace: &mut Workspace, pane: &View<Pane>, cx: &mut ViewCo
             let buffer_search_bar = cx.new_view(search::BufferSearchBar::new);
             toolbar.add_item(buffer_search_bar.clone(), cx);
 
-            let quick_action_bar =
-                cx.new_view(|cx| QuickActionBar::new(buffer_search_bar, workspace, cx));
+            let quick_action_bar = cx.new_view(|cx| QuickActionBar::new(buffer_search_bar, cx));
             toolbar.add_item(quick_action_bar, cx);
             let diagnostic_editor_controls = cx.new_view(|_| diagnostics::ToolbarControls::new());
             toolbar.add_item(diagnostic_editor_controls, cx);
@@ -881,64 +862,6 @@ fn open_local_file(
             cx.new_view(|_| MessageNotification::new("This project has no folders open."))
         })
     }
-}
-
-fn open_telemetry_log_file(workspace: &mut Workspace, cx: &mut ViewContext<Workspace>) {
-    workspace.with_local_workspace(cx, move |workspace, cx| {
-        let app_state = workspace.app_state().clone();
-        cx.spawn(|workspace, mut cx| async move {
-            async fn fetch_log_string(app_state: &Arc<AppState>) -> Option<String> {
-                let path = app_state.client.telemetry().log_file_path()?;
-                app_state.fs.load(&path).await.log_err()
-            }
-
-            let log = fetch_log_string(&app_state).await.unwrap_or_else(|| "// No data has been collected yet".to_string());
-
-            const MAX_TELEMETRY_LOG_LEN: usize = 5 * 1024 * 1024;
-            let mut start_offset = log.len().saturating_sub(MAX_TELEMETRY_LOG_LEN);
-            if let Some(newline_offset) = log[start_offset..].find('\n') {
-                start_offset += newline_offset + 1;
-            }
-            let log_suffix = &log[start_offset..];
-            let json = app_state.languages.language_for_name("JSON").await.log_err();
-
-            workspace.update(&mut cx, |workspace, cx| {
-                let project = workspace.project().clone();
-                let buffer = project
-                    .update(cx, |project, cx| project.create_local_buffer("", None, cx));
-                buffer.update(cx, |buffer, cx| {
-                    buffer.set_language(json, cx);
-                    buffer.edit(
-                        [(
-                            0..0,
-                            concat!(
-                                "// Zed collects anonymous usage data to help us understand how people are using the app.\n",
-                                "// Telemetry can be disabled via the `settings.json` file.\n",
-                                "// Here is the data that has been reported for the current session:\n",
-                                "\n"
-                            ),
-                        )],
-                        None,
-                        cx,
-                    );
-                    buffer.edit([(buffer.len()..buffer.len(), log_suffix)], None, cx);
-                });
-
-                let buffer = cx.new_model(|cx| {
-                    MultiBuffer::singleton(buffer, cx).with_title("Telemetry Log".into())
-                });
-                workspace.add_item_to_active_pane(
-                    Box::new(cx.new_view(|cx| Editor::for_multibuffer(buffer, Some(project), true, cx))),
-                    None,
-                    true,
-                    cx,
-                );
-            }).log_err()?;
-
-            Some(())
-        })
-        .detach();
-    }).detach();
 }
 
 fn open_bundled_file(
@@ -3457,13 +3380,7 @@ mod tests {
             project_panel::init((), cx);
             outline_panel::init((), cx);
             terminal_view::init(cx);
-            language_model::init(app_state.client.clone(), cx);
-            assistant::init(app_state.fs.clone(), app_state.client.clone(), cx);
-            repl::init(
-                app_state.fs.clone(),
-                app_state.client.telemetry().clone(),
-                cx,
-            );
+            repl::init(app_state.fs.clone(), cx);
             tasks_ui::init(cx);
             initialize_workspace(app_state.clone(), cx);
             app_state
